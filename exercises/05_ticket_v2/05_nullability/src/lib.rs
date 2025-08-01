@@ -36,7 +36,10 @@ impl Ticket {
         }
     }
     pub fn assigned_to(&self) -> Option<&String> {
-        todo!()
+        match &self.status {
+            Status::ToDo | Status::Done => None,
+            Status::InProgress { assigned_to } => Some(assigned_to),
+        }
     }
 }
 
