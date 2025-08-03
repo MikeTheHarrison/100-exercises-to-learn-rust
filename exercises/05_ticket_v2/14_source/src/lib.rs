@@ -15,6 +15,12 @@ mod status;
 
 #[derive(Debug, thiserror::Error)]
 pub enum TicketNewError {
+    #[error("{0}", inner)]
+    ParseStatusError {
+        #[source]
+        #[from]
+        inner: status::ParseStatusError,
+    },
     #[error("Title cannot be empty")]
     TitleCannotBeEmpty,
     #[error("Title cannot be longer than 50 bytes")]
@@ -48,11 +54,11 @@ impl Ticket {
         }
 
         // TODO: Parse the status string into a `Status` enum.
-
+        let parsed_status = Status::try_from(status)?;
         Ok(Ticket {
             title,
             description,
-            status,
+            status: parsed_status,
         })
     }
 }
