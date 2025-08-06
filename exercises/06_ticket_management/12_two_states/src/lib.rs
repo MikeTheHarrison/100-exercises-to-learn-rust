@@ -6,15 +6,19 @@
 // You also need to add a `get` method that takes as input a `TicketId`
 // and returns an `Option<&Ticket>`.
 
+use std::collections::HashMap;
+
+use uuid::Uuid;
+
 use ticket_fields::{TicketDescription, TicketTitle};
 
 #[derive(Clone)]
 pub struct TicketStore {
-    tickets: Vec<Ticket>,
+    tickets: HashMap<Uuid, Ticket>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct TicketId(u64);
+pub struct TicketId(Uuid);
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Ticket {
@@ -37,15 +41,33 @@ pub enum Status {
     Done,
 }
 
+impl Default for TicketStore {
+    fn default() -> Self {
+        TicketStore::new()
+    }
+}
+
 impl TicketStore {
     pub fn new() -> Self {
         Self {
-            tickets: Vec::new(),
+            tickets: HashMap::new(),
         }
     }
 
-    pub fn add_ticket(&mut self, ticket: Ticket) {
-        self.tickets.push(ticket);
+    pub fn add_ticket(&mut self, draft: TicketDraft) -> TicketId {
+        let ticket_id = TicketId(Uuid::new_v4());
+        let ticket = Ticket {
+            id: ticket_id,
+            title: draft.title,
+            description: draft.description,
+            status: Status::ToDo,
+        };
+        self.tickets.insert(ticket_id.0, ticket);
+        ticket_id
+    }
+
+    pub fn get(&self, ticket_id: TicketId) -> Option<&Ticket> {
+        self.tickets.get(&ticket_id.0)
     }
 }
 
