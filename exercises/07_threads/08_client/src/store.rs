@@ -4,6 +4,12 @@ use std::collections::BTreeMap;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TicketId(u64);
 
+impl TicketId {
+    pub fn new(id: u64) -> TicketId {
+        TicketId(id)
+    }
+}
+
 #[derive(Clone)]
 pub struct TicketStore {
     tickets: BTreeMap<TicketId, Ticket>,

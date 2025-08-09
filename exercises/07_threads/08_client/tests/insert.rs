@@ -1,5 +1,6 @@
 use client::data::{Status, TicketDraft};
 use client::launch;
+use client::store::TicketId;
 use ticket_fields::test_helpers::{ticket_description, ticket_title};
 
 #[test]
@@ -18,4 +19,6 @@ fn insert_works() {
     assert_eq!(ticket.status, Status::ToDo);
     assert_eq!(ticket.title, draft.title);
     assert_eq!(ticket.description, draft.description);
+
+    assert_eq!(None, client.get(TicketId::new(666)));
 }
