@@ -7,12 +7,13 @@ pub mod store;
 
 #[derive(Clone)]
 // TODO: flesh out the client implementation.
-pub struct TicketStoreClient {}
+pub struct TicketStoreClient {
+}
 
 impl TicketStoreClient {
     // Feel free to panic on all errors, for simplicity.
     pub fn insert(&self, draft: TicketDraft) -> TicketId {
-        todo!()
+        self.
     }
 
     pub fn get(&self, id: TicketId) -> Option<Ticket> {
@@ -23,10 +24,11 @@ impl TicketStoreClient {
 pub fn launch() -> TicketStoreClient {
     let (sender, receiver) = std::sync::mpsc::channel();
     std::thread::spawn(move || server(receiver));
-    todo!()
+    std::thread::spawn(move || receiver(sender));
 }
 
 // No longer public! This becomes an internal detail of the library now.
+#[derive(Clone)]
 enum Command {
     Insert {
         draft: TicketDraft,
