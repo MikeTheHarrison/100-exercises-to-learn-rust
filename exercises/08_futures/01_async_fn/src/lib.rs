@@ -1,3 +1,5 @@
+use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 
 // TODO: write an echo server that accepts incoming TCP connections and
@@ -11,7 +13,25 @@ use tokio::net::TcpListener;
 // - `tokio::net::TcpStream::split` to obtain a reader and a writer from the socket
 // - `tokio::io::copy` to copy data from the reader to the writer
 pub async fn echo(listener: TcpListener) -> Result<(), anyhow::Error> {
-    todo!()
+    loop {
+        let (mut stream, addr) = listener.accept().await?;
+        println!("Accepted connection from {}", addr);
+
+        tokio::spawn(async move {
+            let mut buf = [0, 4];
+            let (mut rx_stream, mut tx_stream) = stream.split();
+            loop {
+                let recv_len = rx_stream.read(&mut buf).await.unwrap();
+                if 0 == recv_len {
+                    break;
+                }
+                let send_len = tx_stream.write(&buf[..recv_len]).await.unwrap();
+                if 0 == send_len {
+                    break;
+                }
+            }
+        });
+    }
 }
 
 #[cfg(test)]
@@ -25,7 +45,13 @@ mod tests {
         let addr = listener.local_addr().unwrap();
         tokio::spawn(echo(listener));
 
-        let requests = vec!["hello", "world", "foo", "bar"];
+        let requests = vec![
+            "hello",
+            "world",
+            "foo",
+            "bar",
+            "The quick brown fox jumped over the lazy dog.",
+        ];
 
         for request in requests {
             let mut socket = tokio::net::TcpStream::connect(addr).await.unwrap();
