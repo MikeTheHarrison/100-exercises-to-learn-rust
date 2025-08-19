@@ -15,9 +15,10 @@ pub async fn echoes(first: TcpListener, second: TcpListener) -> Result<(), anyho
         echo(second).await;
     });
 
-    let _ = first_future.await;
-    let _ = second_future.await;
+    let (first_result, second_result) = tokio::join!(first_future, second_future);
 
+    first_result?;
+    second_result?;
     Ok(())
 }
 
