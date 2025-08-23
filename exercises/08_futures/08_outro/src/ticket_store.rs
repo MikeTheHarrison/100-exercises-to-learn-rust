@@ -1,19 +1,3 @@
-// This is our last exercise. Let's go down a more unstructured path!
-// Try writing an **asynchronous REST API** to expose the functionality
-// of the ticket management system we built throughout the course.
-// It should expose endpoints to:
-//  - Create a ticket
-//  - Retrieve ticket details
-//  - Patch a ticket
-//
-// Use Rust's package registry, crates.io, to find the dependencies you need
-// (if any) to build this system.
-
-use serde::{Deserialize, Serialize};
-use serde_json::{self, Error};
-use std::{collections::HashMap, sync::Arc};
-use tokio::{io::AsyncReadExt, net::TcpListener, sync::RwLock};
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Ticket {
     id: u64,
@@ -90,40 +74,6 @@ impl TicketStore {
             }
         }
     }
-}
-
-pub async fn launch_server(addr: std::net::IpAddr, port: u16) {
-    let ticket_store = Arc::new(TicketStore::default());
-    let listener = TcpListener::bind((addr, port)).await.unwrap();
-    loop {
-        let (mut stream, addr) = listener.accept().await.unwrap();
-        let store_clone = Arc::clone(&ticket_store);
-        tokio::spawn(async move {
-            let mut buffer = Vec::new();
-            let n = stream.read_to_end(&mut buffer).await.unwrap();
-
-            let message = json_to_ticket_message(&buffer);
-            match message {
-                Ok(ticket_msg) => {
-                    let _response = store_clone.handle_message(&ticket_msg);
-                }
-                Err(e) => todo!(),
-            }
-        });
-    }
-}
-
-pub fn json_to_ticket_message(json: &Vec<u8>) -> Result<TicketMessage, TicketError> {
-    match String::from_utf8(json) {
-        Ok(json_str) => {
-            let message: Result<TicketMessage, Error> = serde_json::from_str(&json_str);
-            match message {
-                Ok(ticket_message) => return Ok(ticket_message),
-                Err(e) => Err(TicketError(e.to_string())),
-            }
-        }
-        Err(e) => return Err(TicketError(e.to_string())),
-    };
 }
 
 #[cfg(test)]

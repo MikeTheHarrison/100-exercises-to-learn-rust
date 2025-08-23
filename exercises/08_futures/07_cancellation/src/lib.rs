@@ -36,6 +36,11 @@ mod tests {
             let (beginning, end) = message.split_at(message.len() / 2);
 
             // Send first half
+            // hello (2/5) -> he
+            // from (2/4) -> fr
+            // this (2/4) -> th
+            // task (2/4) -> ta
+            // hefrthta
             writer.write_all(beginning.as_bytes()).await.unwrap();
             tokio::time::sleep(timeout * 2).await;
             writer.write_all(end.as_bytes()).await.unwrap();
@@ -46,6 +51,6 @@ mod tests {
 
         let buffered = handle.await.unwrap();
         let buffered = std::str::from_utf8(&buffered).unwrap();
-        assert_eq!(buffered, "");
+        assert_eq!(buffered, "hefrthta");
     }
 }
