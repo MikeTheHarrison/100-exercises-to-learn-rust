@@ -9,197 +9,71 @@
 // Use Rust's package registry, crates.io, to find the dependencies you need
 // (if any) to build this system.
 
-use serde::{Deserialize, Serialize};
-use serde_json::{self, Error};
-use std::{collections::HashMap, sync::Arc};
-use tokio::{io::AsyncReadExt, net::TcpListener, sync::RwLock};
+use serde_json::{self};
+use std::sync::Arc;
+use tokio::{io::AsyncReadExt, net::TcpListener};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Ticket {
-    id: u64,
-    title: String,
-    description: String,
-}
+use crate::ticket_store::{TicketError, TicketMessage, TicketStore};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TicketMessage {
-    Create(Ticket),
-    Get(u64),
-    Patch(TicketPatch),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TicketPatch {
-    title: Option<String>,
-    description: Option<String>,
-    id: u64,
-}
-
-#[derive(Debug)]
-pub struct TicketError(String);
-
-#[derive(Default, Debug)]
-pub struct TicketStore {
-    date: RwLock<TicketData>,
-}
-
-#[derive(Default, Debug)]
-pub struct TicketData {
-    last_id: u64,
-    tickets: HashMap<u64, Ticket>,
-}
-
-impl TicketStore {
-    pub fn handle_message(&mut self, message: &TicketMessage) -> Result<Ticket, TicketError> {
-        match message {
-            TicketMessage::Create(ticket) if ticket.description.len() > 256 => {
-                Err(TicketError(String::from("Description too long, max 256.")))
-            }
-            TicketMessage::Create(ticket) if ticket.title.len() > 128 => {
-                Err(TicketError(String::from("Title too long, max 128.")))
-            }
-            TicketMessage::Create(ticket) => {
-                self.last_id += 1;
-                let new_ticket: Ticket = Ticket {
-                    id: self.last_id,
-                    title: ticket.title.clone(),
-                    description: ticket.description.clone(),
-                };
-                self.tickets.insert(new_ticket.id, new_ticket.clone());
-                Ok(new_ticket)
-            }
-            TicketMessage::Get(id) => {
-                if let Some(ticket) = self.tickets.get(id) {
-                    Ok(ticket.clone())
-                } else {
-                    Err(TicketError(String::from("Ticket not found.")))
-                }
-            }
-            TicketMessage::Patch(ticket_patch) => {
-                if let Some(ticket) = self.tickets.get_mut(&ticket_patch.id) {
-                    if let Some(description) = &ticket_patch.description {
-                        ticket.description = description.clone();
-                    }
-                    if let Some(title) = &ticket_patch.title {
-                        ticket.title = title.clone();
-                    }
-                    Ok(ticket.clone())
-                } else {
-                    Err(TicketError(String::from("Ticket not found.")))
-                }
-            }
-        }
-    }
-}
+pub mod ticket_store;
 
 pub async fn launch_server(addr: std::net::IpAddr, port: u16) {
     let ticket_store = Arc::new(TicketStore::default());
     let listener = TcpListener::bind((addr, port)).await.unwrap();
     loop {
-        let (mut stream, addr) = listener.accept().await.unwrap();
+        let (mut stream, _addr) = listener.accept().await.unwrap();
         let store_clone = Arc::clone(&ticket_store);
         tokio::spawn(async move {
             let mut buffer = Vec::new();
             let n = stream.read_to_end(&mut buffer).await.unwrap();
 
+            if n == 0 {
+                // EOM or error.
+                return;
+            }
+
             let message = json_to_ticket_message(&buffer);
             match message {
                 Ok(ticket_msg) => {
-                    let _response = store_clone.handle_message(&ticket_msg);
+                    let _response = store_clone.handle_message(&ticket_msg).await;
+                    //stream.write(response);
                 }
-                Err(e) => todo!(),
+                Err(_e) => todo!(), // stream.write(Err(e)),
             }
         });
     }
 }
 
 pub fn json_to_ticket_message(json: &Vec<u8>) -> Result<TicketMessage, TicketError> {
-    match String::from_utf8(json) {
-        Ok(json_str) => {
-            let message: Result<TicketMessage, Error> = serde_json::from_str(&json_str);
-            match message {
-                Ok(ticket_message) => return Ok(ticket_message),
-                Err(e) => Err(TicketError(e.to_string())),
-            }
-        }
-        Err(e) => return Err(TicketError(e.to_string())),
-    };
+    match serde_json::from_slice::<TicketMessage>(&json) {
+        Ok(message) => Ok(message),
+        Err(error) => Err(TicketError(error.to_string())),
+    }
+}
+
+pub fn ticket_to_json(ticket: &TicketMessage) -> String {
+    serde_json::to_string_pretty(ticket).unwrap()
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::ticket_store::Ticket;
+
     use super::*;
 
     #[tokio::test]
     async fn ticket_tester() {}
 
-    #[tokio::test]
-    async fn ticket_store_create_tests() {
-        let mut ts: TicketStore = TicketStore::default();
+    #[test]
+    fn test_ticket_to_json() {
+        let ticket = Ticket::new(1024, String::from("title"), String::from("description"));
+        let mesg = TicketMessage::Create(ticket);
+        let json_ticket = ticket_to_json(&mesg);
+        let dup_ticket = json_to_ticket_message(&json_ticket.as_bytes().to_vec()).unwrap();
 
-        let ticket = Ticket {
-            id: 99,
-            title: "Title".to_string(),
-            description: "Description".to_string(),
-        };
-        let create = TicketMessage::Create(ticket.clone());
-        let response = ts.handle_message(&create).await;
-        assert!(response.is_ok());
+        println!("to json_ticket -> {json_ticket}");
+        println!("from json ticket -> {:?}", &dup_ticket);
 
-        let created_ticket = response.unwrap();
-
-        assert_ne!(&created_ticket.id, &99);
-        assert_eq!(&created_ticket.id, &1);
-        assert_eq!(&created_ticket.description, &ticket.description);
-        assert_eq!(&created_ticket.title, &ticket.title);
-    }
-
-    #[tokio::test]
-    async fn ticket_store_get_tests() {
-        let mut ts: TicketStore = TicketStore::default();
-
-        let ticket = Ticket {
-            id: 99,
-            title: "Title".to_string(),
-            description: "Description".to_string(),
-        };
-        let create = TicketMessage::Create(ticket.clone());
-        let response = ts.handle_message(&create).await;
-        assert!(response.is_ok());
-
-        let get_ticket = ts.handle_message(&TicketMessage::Get(1)).await.unwrap();
-        assert_eq!(&get_ticket.id, &1);
-        assert_eq!(&get_ticket.description, &ticket.description);
-        assert_eq!(&get_ticket.title, &ticket.title);
-    }
-
-    #[tokio::test]
-    async fn ticket_store_patch_tests() {
-        let mut ts: TicketStore = TicketStore::default();
-
-        let ticket = Ticket {
-            id: 99,
-            title: "Title".to_string(),
-            description: "Description".to_string(),
-        };
-        let create = TicketMessage::Create(ticket.clone());
-        let response = ts.handle_message(&create).await;
-        assert!(response.is_ok());
-
-        let created_ticket = response.unwrap();
-
-        // Bad patch, id doesn't match.
-        let mut patch = TicketPatch {
-            title: None,
-            description: None,
-            id: 1111,
-        };
-        let response = ts.handle_message(&TicketMessage::Patch(patch)).await;
-        assert!(response.is_err());
-        if let Err(TicketError(error)) = response {
-            println!("{error}");
-        } else {
-            assert!(false, "Didn't catch patch error!");
-        }
+        assert_eq!(mesg, dup_ticket);
     }
 }
